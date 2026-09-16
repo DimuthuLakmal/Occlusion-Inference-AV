@@ -1,0 +1,66 @@
+syntax = "proto3";
+
+package ogm_inference.v1;
+
+// Predicts occupancy for a set of currently-occluded cells in a traffic scene,
+// given the observed history of the adjacent (visible) vehicles.
+service OGMInferenceService {
+  rpc PredictOccupancy (PredictOccupancyRequest) returns (PredictOccupancyResponse);
+}
+
+enum VehicleType {
+  CAR = 0;
+  TRUCK_BUS = 1;
+  BICYCLE = 2;
+  PEDESTRIAN = 3;
+}
+
+// One historical timestep of an adjacent vehicle's observed state.
+// x_norm/y_norm are the vehicle center normalized by the scene background
+// image's (width, height). An all-zero timestep (every field left at its
+// default) marks a timestep where the vehicle was not yet visible/recorded.
+message VehicleTimestep {
+  float x_norm = 1;
+  float y_norm = 2;
+  float heading_deg = 3;
+  float x_velocity = 4;
+  float y_velocity = 5;
+  float x_acceleration = 6;
+  float y_acceleration = 7;
+  VehicleType vehicle_type = 8;
+}
+
+// A single adjacent vehicle's observation history. `timesteps` must contain
+// exactly HISTORY_LENGTH + 1 entries, oldest first (last entry = current frame).
+message VehicleObservation {
+  string track_id = 1; // opaque identifier, for caller-side correlation only
+  repeated VehicleTimestep timesteps = 2;
+}
+
+// A currently-occluded cell to predict occupancy for, given in raw pixel
+// coordinates within the scene's background image.
+message OccludedCell {
+  float cx = 1;
+  float cy = 2;
+}
+
+message PredictOccupancyRequest {
+  int32 scene_id = 1;
+  // Ego vehicle heading (degrees) at the current frame. Only used to orient
+  // the cell-highlight overlay drawn into the map image fed to the model.
+  float ego_heading_deg = 2;
+  repeated VehicleObservation vehicles = 3;
+  repeated OccludedCell cells = 4;
+}
+
+message CellPrediction {
+  float cx = 1;
+  float cy = 2;
+  float occupancy_probability = 3;
+  bool is_occupied = 4;
+}
+
+// `predictions` is returned in the same order as `PredictOccupancyRequest.cells`.
+message PredictOccupancyResponse {
+  repeated CellPrediction predictions = 1;
+}

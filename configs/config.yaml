@@ -1,0 +1,57 @@
+model:
+  lr: 0.002661901888489057
+  use_lr_scheduler: true
+  save_checkpoints: true
+  save_best_checkpoint: true
+  train_batch_size: 8
+  test_batch_size: 8
+  train_epochs: 100
+  model_output_path: ../results/checkpoints/epoch_{}.pt
+  load_saved_model: false
+  model_input_path: ../results/checkpoints/best_optuna_trial.pt
+  log_file: ../results/app_{}.log
+  tb_log_dir: ../results/runs/
+  device: cuda
+  obs_temporal_encoder:
+    dim_model: 64
+    seq_len: 21
+    input_dim: 10
+    num_layers: 4
+    num_heads: 8
+    dropout: 0.4847923138822793
+  z_temporal_encoder:
+    dim_model: 64
+    seq_len: 21
+    input_dim: 10
+    num_layers: 2
+    num_heads: 2
+    dropout: 0.3875664116805573
+  gat:
+    ogm_input_dim: 2
+    dim_model: 128
+    dim_cell_model: 16
+    dim_obs_model: 64
+    dim_edge: 1
+    num_heads: 4
+    dropout: 0.13567451588694796
+  map_encoder:
+    architecture: convnext_tiny
+    num_semantic_classes: 9
+    pretrained: true
+    stem_init: random
+    projection_dim: 16
+    map_context_dim: 64
+    cell_node_dim: 16
+    dropout: 0.49344346830025865
+    freeze_backbone: false
+data:
+  dataset_dir: ../data/
+  label_dir: ../data/annotations/
+  dataset: ind
+  visualizer_params_dir: ../data/visualizer_params/
+  history_length: 20
+  num_features: 9
+  num_workers: 1
+  start_scene: 0
+  end_scene: 24
+  observation_data_filename: data.pkl
