@@ -24,41 +24,66 @@ class SemanticContextEncoder(nn.Module):
         super().__init__()
         # Select map backbone.
         if architecture == "convnext_tiny":
-            self.map_encoder = ConvNeXtMapEncoder(
-                in_channels=num_semantic_classes,
-                pretrained=pretrained,
-                stem_init=stem_init,
-                freeze_backbone=freeze_backbone,
+
+            self.map_encoder = (
+                ConvNeXtMapEncoder(
+                    in_channels=(
+                        num_semantic_classes
+                    ),
+                    pretrained=pretrained,
+                    stem_init=stem_init,
+                    freeze_backbone=(
+                        freeze_backbone
+                    ),
+                )
             )
 
         elif architecture == "regnet_y_800mf":
-            self.map_encoder = RegNetY800MFMapEncoder(
-                in_channels=num_semantic_classes,
-                pretrained=pretrained,
-                stem_init=stem_init,
-                freeze_backbone=freeze_backbone,
+
+            self.map_encoder = (
+                RegNetY800MFMapEncoder(
+                    in_channels=(
+                        num_semantic_classes
+                    ),
+                    pretrained=pretrained,
+                    stem_init=stem_init,
+                    freeze_backbone=(
+                        freeze_backbone
+                    ),
+                )
             )
 
-        self.sampler = CellConditionedMultiScaleSampler(
-            in_channels=self.map_encoder.out_channels,
-            projection_dim=projection_dim,
-            output_dim=map_context_dim,
-            dropout=dropout,
+        self.sampler = (
+            CellConditionedMultiScaleSampler(
+                in_channels=self.map_encoder.out_channels,
+                projection_dim=projection_dim,
+                output_dim=map_context_dim,
+                dropout=dropout,
+            )
         )
 
-        self.cell_encoder = CellNodeEncoder(
-            map_context_dim=map_context_dim,
-            output_dim=cell_node_dim,
-            dropout=dropout,
+        self.cell_encoder = (
+            CellNodeEncoder(
+                map_context_dim=map_context_dim,
+                output_dim=cell_node_dim,
+                dropout=dropout,
+            )
         )
 
-        self.mask_encoder = CellNodeEncoder(
-            map_context_dim=map_context_dim,
-            output_dim=cell_node_dim,
-            dropout=dropout,
+        self.mask_encoder = (
+            CellNodeEncoder(
+                map_context_dim=map_context_dim,
+                output_dim=cell_node_dim,
+                dropout=dropout,
+            )
         )
 
-    def forward(self, semantic_map: torch.Tensor, cell_xy: torch.Tensor, cell_mask=None):
+    def forward(
+        self,
+        semantic_map: torch.Tensor,
+        cell_xy: torch.Tensor,
+        cell_mask=None,
+    ):
         """
         semantic_map:
             [B,K,H,W]
@@ -75,9 +100,19 @@ class SemanticContextEncoder(nn.Module):
             cell_mask=cell_mask,
         )
 
-        cell_embedding = self.cell_encoder(cell_xy=cell_xy, map_context=map_context)
+        cell_embedding = (
+            self.cell_encoder(
+                cell_xy=cell_xy,
+                map_context=map_context,
+            )
+        )
 
-        z_mask_embedding = self.mask_encoder(cell_xy=cell_xy, map_context=map_context)
+        z_mask_embedding = (
+            self.mask_encoder(
+                cell_xy=cell_xy,
+                map_context=map_context,
+            )
+        )
 
         return {
             "cell_embedding": cell_embedding,

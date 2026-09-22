@@ -25,7 +25,7 @@ from torch_geometric.utils import (
 from torch_geometric.utils.sparse import set_sparse_value
 
 from src.models.gat.message_passing import MessagePassing
-from src.models.gat.sgat_utils import l0_train, l0_test, get_loss2, masked_normalize_multihead
+from src.models.gat.sgat_utils import l0_train, l0_test, get_loss2, masked_normalize_multihead, standardize_per_node
 
 if typing.TYPE_CHECKING:
     from typing import overload
@@ -48,6 +48,8 @@ class GATv2Conv(MessagePassing):
             bias: bool = True,
             share_weights: bool = False,
             residual: bool = False,
+            head_diversity_weight: float = 0.0,
+            l0_loss_weights: Optional[list] = None,
             **kwargs,
     ):
         super().__init__(node_dim=0, **kwargs)
@@ -55,6 +57,17 @@ class GATv2Conv(MessagePassing):
         self.in_channels = in_channels
         self.out_channels = out_channels
         self.heads = heads
+        self.head_diversity_weight = head_diversity_weight
+
+        if l0_loss_weights is not None:
+            if len(l0_loss_weights) != heads:
+                raise ValueError(
+                    f"l0_loss_weights has {len(l0_loss_weights)} entries but heads={heads}")
+            self.register_buffer('l0_loss_weights',
+                                 torch.tensor(l0_loss_weights, dtype=torch.float32))
+        else:
+            self.l0_loss_weights = None
+
         self.concat = concat
         self.negative_slope = negative_slope
         self.dropout = dropout
@@ -129,8 +142,7 @@ class GATv2Conv(MessagePassing):
         self.att = Parameter(torch.empty(1, heads, out_channels))
 
         # Head-specific mask attention parameters.
-        self.att_z_l = Parameter(torch.empty(1, heads, out_channels))
-        self.att_z_r = Parameter(torch.empty(1, heads, out_channels))
+        self.att_z = Parameter(torch.empty(1, heads, out_channels))
 
         if edge_dim is not None:
             self.lin_edge = Linear(
@@ -192,8 +204,11 @@ class GATv2Conv(MessagePassing):
         nn.init.uniform_(self.lin_r.weight, a=-1.0, b=1.0)
 
         # Sparse-mask branch
-        nn.init.uniform_(self.lin_l_z.weight, a=-1.0, b=1.0)
-        nn.init.uniform_(self.lin_r_z.weight, a=-1.0, b=1.0)
+        glorot(self.lin_l_z.weight)
+        glorot(self.lin_r_z.weight)
+
+        if self.lin_edge_z is not None:
+            glorot(self.lin_edge_z.weight)
 
         if self.lin_l.bias is not None:
             zeros(self.lin_l.bias)
@@ -208,17 +223,13 @@ class GATv2Conv(MessagePassing):
         if self.lin_edge is not None:
             nn.init.uniform_(self.lin_edge.weight, a=-1.0, b=1.0)
 
-        if self.lin_edge_z is not None:
-            nn.init.uniform_(self.lin_edge_z.weight, a=-1.0, b=1.0)
-
         # Residual branch
         if self.res is not None:
             nn.init.uniform_(self.res.weight, a=-1.0, b=1.0)
 
         # Attention vectors
         glorot(self.att)
-        glorot(self.att_z_l)
-        glorot(self.att_z_r)
+        glorot(self.att_z)
 
         # Output bias
         if self.bias is not None:
@@ -377,43 +388,54 @@ class GATv2Conv(MessagePassing):
         output z_raw: [E, H]
         """
 
-        # Use the mask-specific attention parameters.
-        # This was missing in the current version, although att_z_l/att_z_r exist.
-        logits_l = (x_i * self.att_z_l).sum(dim=-1)  # [E, H]
-        logits_r = (x_j * self.att_z_r).sum(dim=-1)  # [E, H]
+        # 1. Combine cell and agent features: [E, H, C]
+        joint = x_i + x_j
 
-        logits = logits_l + logits_r + self.bias_l0_z  # [E, H]
-
-        # Add edge features in a head-specific way.
+        # 2. Add projected edge features
         if edge_attr is not None:
             if edge_attr.dim() == 1:
-                edge_attr = edge_attr.view(-1, 1)
+                edge_attr = edge_attr.unsqueeze(-1)
 
-            assert self.lin_edge_z is not None
+            joint = joint + self.lin_edge_z(edge_attr).view(
+                -1, self.heads, self.out_channels
+            )
 
-            edge_attr_z = self.lin_edge_z(edge_attr)  # [E, H * C]
-            edge_attr_z = edge_attr_z.view(
-                -1,
-                self.heads,
-                self.out_channels
-            )  # [E, H, C]
+        # 3. Apply the nonlinearity HERE
+        joint = F.leaky_relu(
+            joint,
+            negative_slope=self.negative_slope,
+        )
 
-            logits = logits + edge_attr_z.sum(dim=-1)  # [E, H]
+        # 4. Reduce to one score per edge and head: [E, H]
+        logits = (joint * self.att_z).sum(dim=-1)
 
-        # Important change:
-        # Normalise each head over all edges, not each edge over all heads.
-        std = logits.std(dim=0, keepdim=True, unbiased=False)
-        logits = (logits - logits.mean(dim=0, keepdim=True)) / (std + 1e-6)
+        # Normalise each head over the edges of each target cell, not each edge over all heads.
+        logits = standardize_per_node(logits, index, dim_size)
 
         if self.training:
-            # Keep this simple first.
-            # You can add multi-sample averaging later if the gates are too noisy.
             z_raw = l0_train(logits, 0.0, 1.0)  # [E, H]
         else:
             z_raw = l0_test(logits, 0.0, 1.0)  # [E, H]
 
-        # L0 regularisation term.
-        self.loss = get_loss2(logits).sum()
+        # L0 regularisation term. Summed over edges first so an optional per-head weight
+        loss_per_head = get_loss2(logits).sum(dim=0)  # [H]
+        if self.l0_loss_weights is not None:
+            loss_per_head = loss_per_head * self.l0_loss_weights
+        self.loss = loss_per_head.sum()
+
+        # Head-diversity regularisation: with concat=False
+        # Penalise pairwise similarity between heads' per-edge logits to push them apart.
+        if self.heads > 1 and self.head_diversity_weight > 0:
+            # logits is [E, H], already mean-0/std-1 per head per target cell (normalisation above) - unit-norm
+            # each head's column so the dot product below is a cosine similarity.
+            normed = logits / (logits.norm(dim=0, keepdim=True) + 1e-8)  # [E, H]
+            sim = normed.t() @ normed  # [H, H] pairwise cosine similarity between heads
+            off_diag = ~torch.eye(self.heads, dtype=torch.bool, device=logits.device)
+            # Squared, not raw, similarity: minimising raw cosine similarity would just push
+            # heads toward perfect anti-correlation (sim=-1), which is exactly as degenerate/
+            # structured as sim=+1. Squaring makes sim=0 (decorrelated) the optimum instead.
+            diversity_penalty = sim[off_diag].pow(2).mean()
+            self.loss = self.loss + self.head_diversity_weight * diversity_penalty
 
         return z_raw
 

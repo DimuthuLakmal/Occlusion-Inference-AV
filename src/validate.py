@@ -16,7 +16,8 @@ def percentile(values, p):
     return float(np.percentile(values, p))
 
 
-def evaluate(model, valid_data_loader, device, writer=None, epoch=0, test=False, warmup_batches=10):
+def evaluate(model, valid_data_loader, device, writer=None, epoch=0, test=False, warmup_batches=10,
+            threshold=0.5):
     # Loading background images
     background_images = {}
     for scene_id in [0, 7, 8, 18, 19]:
@@ -109,7 +110,7 @@ def evaluate(model, valid_data_loader, device, writer=None, epoch=0, test=False,
             loss_sum += loss_aggregated.sum().item()
             mask_count_sum += mask.sum().item()
 
-            tp, fp, fn, tn, y_true, y_prob = accumulate_counts(outputs_sig, targets, mask)
+            tp, fp, fn, tn, y_true, y_prob = accumulate_counts(outputs_sig, targets, mask, threshold=threshold)
             tp_sum += tp
             fp_sum += fp
             fn_sum += fn
@@ -227,7 +228,7 @@ def evaluate(model, valid_data_loader, device, writer=None, epoch=0, test=False,
                          if edge_drop_pct_overall is not None else "N/A")
 
         print("\n" + "-" * 50)
-        print("Task metrics")
+        print(f"Task metrics (threshold={threshold})")
         print("-" * 50)
         print(f'Test Loss: {valid_loss}, Accuracy: {m["accuracy"]}, Precision: {m["precision"]}, '
               f'Recall: {m["recall"]}, Accuracy Free: {m["acc_free"]} F1: {m["f1"]}, '

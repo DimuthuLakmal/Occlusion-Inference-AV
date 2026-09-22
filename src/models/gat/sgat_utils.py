@@ -34,6 +34,27 @@ def get_loss2(logAlpha):
     return sig(logAlpha - const1)
 
 
+def standardize_per_node(src: Tensor,
+                         index: Tensor,
+                         num_nodes: int = None,
+                         eps: float = 1e-6) -> Tensor:
+    """
+    Zero-mean / unit-std standardisation of src [E, H] over the edges of each destination
+    node (per head), rather than over all edges in the graph. Result for a node is then
+    independent of how many other destination nodes share the graph, so stacking several
+    target cells in one graph gives the same values as one graph per cell.
+    Population std (unbiased=False) and the same eps as the former global version.
+    """
+    N = maybe_num_nodes(index, num_nodes)
+
+    count = scatter(torch.ones_like(src[:, :1]), index, dim=0, dim_size=N, reduce='sum').clamp(min=1)  # [N, 1]
+    mean = scatter(src, index, dim=0, dim_size=N, reduce='sum') / count  # [N, H]
+    centered = src - mean.index_select(0, index)
+    var = scatter(centered ** 2, index, dim=0, dim_size=N, reduce='sum') / count  # [N, H]
+
+    return centered / (var.sqrt().index_select(0, index) + eps)
+
+
 def masked_normalize_multihead(src: Tensor,
                                index: Tensor,
                                num_nodes: int = None,

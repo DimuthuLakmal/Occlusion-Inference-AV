@@ -4,7 +4,10 @@ from typing import Dict, Literal
 import torch
 import torch.nn as nn
 
-from torchvision.models import convnext_tiny, ConvNeXt_Tiny_Weights
+from torchvision.models import (
+    convnext_tiny,
+    ConvNeXt_Tiny_Weights,
+)
 
 
 class ConvNeXtMapEncoder(nn.Module):
@@ -39,14 +42,23 @@ class ConvNeXtMapEncoder(nn.Module):
         self,
         in_channels: int,
         pretrained: bool = True,
-        stem_init: Literal["random", "rgb_mean"] = "random",
+        stem_init: Literal[
+            "random",
+            "rgb_mean",
+        ] = "random",
         freeze_backbone: bool = False,
     ):
         super().__init__()
 
-        weights = ConvNeXt_Tiny_Weights.IMAGENET1K_V1 if pretrained else None
+        weights = (
+            ConvNeXt_Tiny_Weights.IMAGENET1K_V1
+            if pretrained
+            else None
+        )
 
-        model = convnext_tiny(weights=weights)
+        model = convnext_tiny(
+            weights=weights
+        )
 
         if in_channels != 3:
             self._replace_input_stem(
@@ -65,7 +77,9 @@ class ConvNeXtMapEncoder(nn.Module):
         })
 
         if freeze_backbone:
-            for parameter in self.features.parameters():
+            for parameter in (
+                self.features.parameters()
+            ):
                 parameter.requires_grad = False
 
     @staticmethod
@@ -105,39 +119,79 @@ class ConvNeXtMapEncoder(nn.Module):
         with torch.no_grad():
 
             if initialization == "random":
+
                 # ConvNeXt-like initialization
-                nn.init.trunc_normal_(new_conv.weight, std=0.02)
+                nn.init.trunc_normal_(
+                    new_conv.weight,
+                    std=0.02,
+                )
 
                 if new_conv.bias is not None:
-                    nn.init.zeros_(new_conv.bias)
+                    nn.init.zeros_(
+                        new_conv.bias
+                    )
 
             elif initialization == "rgb_mean":
+
                 # Convert pretrained RGB filters
                 # [96,3,4,4] -> [96,1,4,4]
-                mean_weight = old_conv.weight.mean(dim=1, keepdim=True)
+                mean_weight = (
+                    old_conv.weight
+                    .mean(
+                        dim=1,
+                        keepdim=True,
+                    )
+                )
 
-                # [96,1,4,4] -> [96,K,4,4]
-                new_conv.weight.copy_(mean_weight.repeat(1, in_channels, 1, 1))
+                # [96,1,4,4]
+                # ->
+                # [96,K,4,4]
+                new_conv.weight.copy_(
+                    mean_weight.repeat(
+                        1,
+                        in_channels,
+                        1,
+                        1,
+                    )
+                )
 
                 if new_conv.bias is not None:
+
                     if old_conv.bias is not None:
-                        new_conv.bias.copy_(old_conv.bias)
+                        new_conv.bias.copy_(
+                            old_conv.bias
+                        )
                     else:
                         new_conv.bias.zero_()
 
             else:
-                raise ValueError("initialization must be 'random' or 'rgb_mean'")
+                raise ValueError(
+                    "initialization must be "
+                    "'random' or 'rgb_mean'"
+                )
 
         model.features[0][0] = new_conv
 
-    def forward(self, x: torch.Tensor) -> Dict[str, torch.Tensor]:
+    def forward(
+        self,
+        x: torch.Tensor,
+    ) -> Dict[str, torch.Tensor]:
 
         if x.ndim != 4:
-            raise ValueError("Expected semantic map [B, C, H, W].")
+            raise ValueError(
+                "Expected semantic map "
+                "[B, C, H, W]."
+            )
 
         outputs = OrderedDict()
 
-        # ConvNeXt stem: 224 x 224 -> 56 x 56
+        # -------------------------------------------------
+        # ConvNeXt stem
+        #
+        # 224 x 224
+        #      ↓
+        # 56 x 56
+        # -------------------------------------------------
         x = self.features[0](x)
 
         # Stage 1
@@ -145,7 +199,10 @@ class ConvNeXtMapEncoder(nn.Module):
 
         outputs["s4"] = x
 
-        # Downsample: 56 -> 28
+        # -------------------------------------------------
+        # Downsample
+        # 56 -> 28
+        # -------------------------------------------------
         x = self.features[2](x)
 
         # Stage 2
@@ -153,7 +210,10 @@ class ConvNeXtMapEncoder(nn.Module):
 
         outputs["s8"] = x
 
-        # Downsample: 28 -> 14
+        # -------------------------------------------------
+        # Downsample
+        # 28 -> 14
+        # -------------------------------------------------
         x = self.features[4](x)
 
         # Stage 3
@@ -161,7 +221,10 @@ class ConvNeXtMapEncoder(nn.Module):
 
         outputs["s16"] = x
 
-        # Downsample: 14 -> 7
+        # -------------------------------------------------
+        # Downsample
+        # 14 -> 7
+        # -------------------------------------------------
         x = self.features[6](x)
 
         # Stage 4

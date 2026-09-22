@@ -31,6 +31,11 @@ def create_args():
     cs.add_argument('--compile_mode', default='default',
                     choices=['default', 'reduce-overhead', 'max-autotune'],
                     help="torch.compile mode to use when --compile is set.")
+    cs.add_argument('--threshold', default=0.5, type=float,
+                    help="Classification threshold to apply to the sigmoid output when "
+                         "computing metrics (see find_best_threshold.py to pick one "
+                         "tuned on the validation split).")
+    # 0.7335
 
     return vars(cs.parse_args())
 
@@ -53,5 +58,5 @@ if __name__ == '__main__':
         model = torch.compile(model, dynamic=True, mode=args['compile_mode'])
 
     test_loss = evaluate(model, valid_dataloader, config['model']["device"], test=True,
-                          warmup_batches=args['warmup_batches'])
+                          warmup_batches=args['warmup_batches'], threshold=args['threshold'])
     print(f'Validation loss {test_loss}')

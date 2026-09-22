@@ -26,7 +26,9 @@ class GATLayer(nn.Module):
                              dropout=config['dropout'],
                              concat=False,
                              edge_dim=dim_edge,
-                             add_self_loops=False)
+                             add_self_loops=False,
+                             head_diversity_weight=config.get('head_diversity_weight', 0.0),
+                             l0_loss_weights=config.get('l0_loss_weights', None))
 
     def forward(self, x_te_batch, x_te_z_batch, cell_batch, z_batch, edge_attr_batch, edge_index_batch):
         x_cell_batch = cell_batch

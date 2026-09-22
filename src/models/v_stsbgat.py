@@ -1,5 +1,6 @@
 from torch import nn
 
+from models.gate.residual_gate import ResidualGatedFusion
 from src.models.vision.semantic_context_encoder import SemanticContextEncoder
 from src.models.gat.gat_layer import GATLayer
 from src.models.transformer.temporal_encoder import TemporalEncoder
@@ -47,7 +48,6 @@ class VSTSBGT(nn.Module):
     def reset_parameters(self):
         """Reset parameters of the model."""
         nn.init.uniform_(self.fc_gat_out.weight, a=-1.0, b=1.0)
-        # TODO: since the classes are not balanced, the weights can be initialized as pos/total
 
     def forward(self, x):
         seq_mask = x['seq_mask']  # Sequence mask for the historical observations
@@ -59,11 +59,6 @@ class VSTSBGT(nn.Module):
         x_te = self.temporal_encoder(veh_feat, seq_mask, vehicle_mask)
         z_te = self.z_encoder(veh_feat, seq_mask, vehicle_mask)
 
-        # -----------------------------------------
-        # NEW:
-        # semantic-map information goes upstream
-        # of graph attention.
-        # -----------------------------------------
         map_outputs = self.semantic_context_encoder(
             semantic_map=semantic_map,
             cell_xy=cell_xy,

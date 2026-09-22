@@ -82,31 +82,35 @@ def build_trial_config(base_config, trial, results_dir, epochs_override):
     return config
 
 
-def keep_only_overall_best_checkpoint(trial, trial_value, results_dir):
-    """Keeps at most ONE checkpoint on disk across the whole study - the current
-    best-overall trial's weights - rather than one per trial (which balloons disk usage
-    over many trials). Compares this trial's value against the best of all PREVIOUSLY
-    completed trials (this trial isn't finalized in the study yet while its own
-    objective() call is still running), promotes this trial's checkpoint to the stable
-    path if it's a new best, and always deletes the trial-local copy afterward.
+def keep_only_overall_best_checkpoint(trial, trial_value, results_dir, trial_config):
+    """Keeps at most ONE checkpoint (plus its config) on disk across the whole study -
+    the current best-overall trial's weights - rather than one per trial (which balloons
+    disk usage over many trials). Compares this trial's value against the best of all
+    PREVIOUSLY completed trials (this trial isn't finalized in the study yet while its own
+    objective() call is still running), promotes this trial's checkpoint and config to the
+    stable path if it's a new best, and always deletes the trial-local checkpoint afterward.
     """
     trial_dir = os.path.join(results_dir, f"trial_{trial.number}")
     trial_ckpt = os.path.join(trial_dir, "best.pt")
     if not os.path.exists(trial_ckpt):
         return
 
-    stable_best_path = os.path.normpath(
-        os.path.join(results_dir, "..", "checkpoints", "best_optuna_trial.pt"))
+    checkpoints_dir = os.path.normpath(os.path.join(results_dir, "..", "checkpoints"))
+    stable_best_path = os.path.join(checkpoints_dir, "best_optuna_trial_vstsbgat_no_7-17-scenes.pt")
+    stable_best_config_path = os.path.join(checkpoints_dir, "best_optuna_trial_config.yaml")
 
     prior_values = [t.value for t in trial.study.get_trials(deepcopy=False)
                    if t.state == optuna.trial.TrialState.COMPLETE]
     prior_best = min(prior_values) if prior_values else None
 
     if prior_best is None or trial_value <= prior_best:
-        os.makedirs(os.path.dirname(stable_best_path), exist_ok=True)
+        os.makedirs(checkpoints_dir, exist_ok=True)
         shutil.copy2(trial_ckpt, stable_best_path)
+        with open(stable_best_config_path, "w") as f:
+            yaml.safe_dump(trial_config, f)
         print(f"Trial {trial.number} (value={trial_value:.6f}) is the new best - "
-             f"checkpoint saved to {stable_best_path}")
+             f"checkpoint saved to {stable_best_path} "
+             f"(config saved to {stable_best_config_path})")
     else:
         print(f"Trial {trial.number} (value={trial_value:.6f}) did not beat the current "
              f"best ({prior_best:.6f}) - discarding its checkpoint to save disk space")
@@ -122,7 +126,7 @@ def objective(trial, base_config, results_dir, epochs_override):
     model = VSTSBGT(config['model']).to(config['model']["device"])
 
     best_loss = train(model, train_dataloader, valid_dataloader, config)
-    keep_only_overall_best_checkpoint(trial, best_loss, results_dir)
+    keep_only_overall_best_checkpoint(trial, best_loss, results_dir, config)
     return best_loss
 
 
@@ -158,7 +162,7 @@ def main():
     print(f"Best params: {study.best_params}")
 
     best_config = apply_params(base_config, study.best_params)
-    out_path = "../configs/config_all_scenes_convnext.yaml"
+    out_path = "../configs/config_hpo_no_7-17-scenes.yaml"
     with open(out_path, "w") as f:
         yaml.safe_dump(best_config, f)
     print(f"Best config written to {out_path}")
@@ -166,7 +170,7 @@ def main():
     # keep_only_overall_best_checkpoint() already keeps this up to date after every trial -
     # nothing left to copy here, just report whether one exists.
     stable_best_path = os.path.normpath(
-        os.path.join(results_dir, "..", "checkpoints", "best_optuna_trial.pt"))
+        os.path.join(results_dir, "..", "checkpoints", "best_optuna_trial_vstsbgat_no_7-17-scenes.pt"))
     if os.path.exists(stable_best_path):
         print(f"Best-known checkpoint available at {stable_best_path}")
     else:
