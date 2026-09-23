@@ -58,30 +58,6 @@ Here, we provide source code in Python these three main tasks.
    annotations_dir specifies the path to the directory containing the occlusion annotations.
 
 
-5. Then, you can use the visualization tool to manually annotate visibility status for selected ego vehicles.
-   ```shell
-   python3 src/annotate_data.py --dataset_dir /<path/to>/inD-dataset-v1.0/data/ --history_length 20 --start_recording_id 32 --end_recording_id 32 --start_frame 2000 --observation_data_file ../data/observations_32_32.pkl
-   ```
-   Here, replace `/<path/to>/inD-dataset-v1.0/data/` with the actual path to the `../data` directory of the inD dataset on your machine.
-    start_recording_id and end_recording_id specify the range of recordings to process (0-32 for inD dataset).
-    history_length specifies the number of past frames to include in the observation data.
-    start_frame specifies the frame number to start the annotation from.
-
-## Annotation Tool Instructions
-Use save button to save the annotations to a file named `<recording_id>_<frame>_<ego_vehicle_id>.json` in the current directory.
-
-Use clear button to clear all annotations for the current scene.
-
-Use next button to jump to the next scene.
-
- | Keyboard Shortcut | Description |
-|-------------------| --- |
-| right arrow/ D    | Jump to next frame |
-| left arrow/ A     | Jump to previous frame |
-
-
-!["Screenshot of annotation tool"](../doc/annotation_tool.png "Screenshot of annotation tool")
-
 ## Citation
 
 If you use one of our datasets or these scripts in your work, please cite our datasets as follows:
