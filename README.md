@@ -16,7 +16,7 @@
     pip3 install -r requirements.txt
     ```
    
-3. Follow the instructions in README files placed in the preprocessing branch. We have only released a part of the annotated data in this repo. Please contact authors to receive rest of the annotations.
+3. Follow the instructions in README files placed in the build_dataset folder for preprocessing inD dataset. Please contact inD authors to access the original inD dataset. We have only        provided the annotation extension in this repo.
    Once you have the observation data prepared, please edit the `configs/config.yaml` file to set the correct paths to your data.
 
 4. Run the training script:
