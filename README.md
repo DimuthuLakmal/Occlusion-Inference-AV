@@ -2,7 +2,7 @@
 
 IMPORTANT: INTERACTION dataset access clarification - 2nd October 2026
 
-We were unable to obtain the required INTERACTION dataset files before the ICRA 2027 submission deadline. On 2 October 2026, the dataset maintainers notified us by email of its availability on Hugging Face. Consequently, an evaluation using INTERACTION could not be included in the submitted paper. Dated email correspondence documenting this access timeline can be provided to the conference chairs.
+We were unable to obtain the required INTERACTION dataset files before the ICRA 2027 submission deadline. On 2 October 2026, the dataset maintainers notified us by email of its new public release on Hugging Face. Consequently, an evaluation using INTERACTION could not be included in the submitted paper. Dated email correspondence documenting this access timeline can be provided to the conference chairs.
 
 ## Installation and Quick Start
 
